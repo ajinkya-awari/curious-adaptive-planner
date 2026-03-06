@@ -366,5 +366,3 @@ If you build on this work, please cite:
 9. Sutton, R. S. (1991). Dyna, an Integrated Architecture for Learning, Planning, and Reacting. *ACM SIGART Bulletin, 2*(4), 160-163.
 
 ---
-
-*Published paper (IJARSCT 2023): Awari, A. et al., "Plant Disease Detection Using Machine Learning," IJARSCT, Vol. 3, Issue 4.*
