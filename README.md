@@ -8,7 +8,7 @@
 
 ## Abstract
 
-Large-scale reinforcement learning agents routinely face a fundamental tension: **fast heuristic policies** are computationally cheap but sub-optimal, while **deliberative planners** are near-optimal but expensive. This repository empirically investigates a hybrid arbitration architecture that combines (1) synchronous Value Iteration as a deliberative planner, (2) an information-gain curiosity signal for exploration, and (3) a confidence-threshold arbiter that selects between the two policies at each timestep. Experiments on an 8x8 stochastic GridWorld benchmark demonstrate that the composite system matches the optimal planner's reward (mean -3.00 vs. -8.30 for the heuristic baseline) while invoking the expensive planner on only **7.1% of steps** — providing empirical support for bounded-optimality results in the RL literature (Russell 1995; Sutton & Barto 2018).
+Large-scale reinforcement learning agents routinely face a fundamental tension: **fast heuristic policies** are computationally cheap but sub-optimal, while **deliberative planners** are near-optimal but expensive. This repository empirically investigates a hybrid arbitration architecture that combines (1) synchronous Value Iteration as a deliberative planner, (2) an information-gain curiosity signal for exploration, and (3) a confidence-threshold arbiter that selects between the two policies at each timestep. Experiments on an 8x8 stochastic GridWorld benchmark demonstrate that the composite system matches the optimal planner's reward (mean -3.00 vs. -8.30 for the heuristic baseline) while invoking the expensive planner on only **7.1% of steps**  providing empirical support for bounded-optimality results in the RL literature (Russell 1995; Sutton & Barto 2018).
 
 ---
 
@@ -74,8 +74,8 @@ The system comprises five components orchestrated by an Executive Control module
 ```
 
 **Module roles:**
-- **Heuristic Policy** (pi_L): greedy Manhattan-distance policy — fast, O(1) per step
-- **Deliberative Planner**: tabular Value Iteration — provably convergent to Q*
+- **Heuristic Policy** (pi_L): greedy Manhattan-distance policy  fast, O(1) per step
+- **Deliberative Planner**: tabular Value Iteration  provably convergent to Q*
 - **Motivation Engine**: surprise-based curiosity bonus driving exploration
 - **Executive Control**: threshold arbiter balancing speed vs. optimality
 
@@ -195,7 +195,7 @@ All three conditions run on the same GridWorld map (seed=42, 500 episodes, max 2
 | **Planner Only** | 100% | **-3.00** | Optimal routes; VI converges before episodes |
 | **NCSF Full** | 100% | **-3.00** | Matches planner; uses deliberation on 7.1% of steps |
 
-**Key finding**: NCSF achieves *identical reward* to the optimal planner while invoking the expensive Value Iteration module on fewer than 1 in 14 steps — the heuristic handles the routine cases.
+**Key finding**: NCSF achieves *identical reward* to the optimal planner while invoking the expensive Value Iteration module on fewer than 1 in 14 steps  the heuristic handles the routine cases.
 
 ### Value Iteration Convergence
 
@@ -210,7 +210,7 @@ All three conditions run on the same GridWorld map (seed=42, 500 episodes, max 2
 
 ### Figures
 
-**Learning Curves — All Three Conditions**
+**Learning Curves - All Three Conditions**
 
 ![Learning Curves](results/figures/01_learning_curves.png)
 
@@ -234,7 +234,7 @@ All three conditions run on the same GridWorld map (seed=42, 500 episodes, max 2
 
 ## Empirical Validation
 
-### Claim 1 — Bellman Operator Convergence
+### Claim 1 - Bellman Operator Convergence
 
 **Theory**: B is a gamma-contraction so `|| Q_{k+1} - Q_k ||_inf` decays geometrically.
 
@@ -242,7 +242,7 @@ All three conditions run on the same GridWorld map (seed=42, 500 episodes, max 2
 
 ---
 
-### Claim 2 — Curiosity Drives Systematic Exploration
+### Claim 2 - Curiosity Drives Systematic Exploration
 
 **Theory**: Information-gain reward incentivises the agent to reduce model uncertainty, leading to polynomial (rather than exponential) state-space coverage (Strehl & Littman 2008).
 
@@ -250,7 +250,7 @@ All three conditions run on the same GridWorld map (seed=42, 500 episodes, max 2
 
 ---
 
-### Claim 3 — Bounded Optimality of Composite Policy
+### Claim 3 - Bounded Optimality of Composite Policy
 
 **Theory**: `V_pi_NCSF(s) >= V_pi_L(s) - 2*delta/(1-gamma)`
 
@@ -314,11 +314,11 @@ This implementation is intentionally minimal to keep the theory-code corresponde
 
 **Environment**: The GridWorld is discrete, fully observable, and deterministic. Real-world applications involve continuous state spaces, partial observability, and stochastic dynamics. Extending to stochastic transitions would require approximate dynamic programming or deep RL methods.
 
-**Heuristic module**: The Manhattan-distance heuristic is a toy stand-in for the kind of rich semantic prior that a pre-trained language model would provide. A natural extension is to replace `HeuristicPolicy` with a fine-tuned LLM queried via a tool-use interface (Yao et al. 2023 — ReAct), making the arbitration mechanism directly applicable to language-grounded tasks.
+**Heuristic module**: The Manhattan-distance heuristic is a toy stand-in for the kind of rich semantic prior that a pre-trained language model would provide. A natural extension is to replace `HeuristicPolicy` with a fine-tuned LLM queried via a tool-use interface (Yao et al. 2023  ReAct), making the arbitration mechanism directly applicable to language-grounded tasks.
 
 **Curiosity model**: The tabular count-based approach scales as O(|S||A|) in memory. For large state spaces, a parametric surprise estimator (e.g., prediction-error curiosity as in Pathak et al. 2017, or a Bayesian neural network as in Houthooft et al. 2016) is necessary.
 
-**Meta-learning**: The planner is fixed after Value Iteration. A proper meta-learning extension (Finn et al. 2017 — MAML) would allow the system to warm-start on a new map using experience from previous maps.
+**Meta-learning**: The planner is fixed after Value Iteration. A proper meta-learning extension (Finn et al. 2017  MAML) would allow the system to warm-start on a new map using experience from previous maps.
 
 **Arbitration threshold**: The confidence threshold xi = 0.5 is fixed. An adaptive schedule where xi decays as the planner's world model becomes more accurate could improve compute efficiency in the early training phase.
 
@@ -328,11 +328,11 @@ This implementation is intentionally minimal to keep the theory-code corresponde
 
 - **Curiosity-Driven Exploration**: Pathak et al. (2017) propose self-supervised prediction error as an intrinsic reward; this project uses a simpler count-based surprise that recovers the same qualitative exploration behaviour in the tabular setting.
 
-- **VIME**: Houthooft et al. (2016) formalise curiosity as information gain on a Bayesian world model — the theoretical inspiration for the `MotivationEngine` here.
+- **VIME**: Houthooft et al. (2016) formalise curiosity as information gain on a Bayesian world model  the theoretical inspiration for the `MotivationEngine` here.
 
 - **Dyna-Q**: Sutton (1991) introduced interleaving model-based planning with direct experience in a single learning loop, the foundational hybrid RL idea that motivates our architecture.
 
-- **ReAct**: Yao et al. (2023) demonstrate LLM-as-orchestrator with tool use, showing that a language model can take on the role of the heuristic prior in complex reasoning tasks — the natural next step for this framework.
+- **ReAct**: Yao et al. (2023) demonstrate LLM-as-orchestrator with tool use, showing that a language model can take on the role of the heuristic prior in complex reasoning tasks  the natural next step for this framework.
 
 ---
 
