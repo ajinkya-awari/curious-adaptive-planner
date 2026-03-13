@@ -218,4 +218,3 @@ Runs the three-condition experiment and generates all five figures. Total runtim
 
 ---
 
-*Published paper: Awari, A. et al. Plant Disease Detection Using Machine Learning. IJARSCT, Vol. 3, Issue 4, April 2023.*
