@@ -1,4 +1,4 @@
-# CuriousPlanner: Curiosity-Augmented Value Iteration with Adaptive Policy Arbitration
+# CuriousPlanner: Investigating Curiosity-Augmented Value Iteration with Adaptive Policy Arbitration
 
 [![Python](https://img.shields.io/badge/Python-3.9%2B-blue)](https://www.python.org/)
 [![NumPy](https://img.shields.io/badge/NumPy-1.24%2B-013243?logo=numpy)](https://numpy.org/)
@@ -6,207 +6,103 @@
 
 ---
 
-## Abstract
+## Research Snapshot
 
-Large-scale reinforcement learning agents routinely face a fundamental tension: **fast heuristic policies** are computationally cheap but sub-optimal, while **deliberative planners** are near-optimal but expensive. This repository empirically investigates a hybrid arbitration architecture that combines (1) synchronous Value Iteration as a deliberative planner, (2) an information-gain curiosity signal for exploration, and (3) a confidence-threshold arbiter that selects between the two policies at each timestep. Experiments on an 8x8 stochastic GridWorld benchmark demonstrate that the composite system matches the optimal planner's reward (mean -3.00 vs. -8.30 for the heuristic baseline) while invoking the expensive planner on only **7.1% of steps**  providing empirical support for bounded-optimality results in the RL literature (Russell 1995; Sutton & Barto 2018).
+This project investigates whether a hybrid agent that delegates most decisions to a cheap heuristic policy, while invoking a costly optimal planner only when confident it will improve outcomes, can reliably match the performance of the optimal planner alone.
 
----
+**Research question:** Does confidence-threshold arbitration between a fast greedy policy and a deliberative Value Iteration planner preserve near-optimal performance while substantially reducing deliberative computation?
 
-## Table of Contents
-
-- [Problem Formulation](#problem-formulation)
-- [Architecture Overview](#architecture-overview)
-- [Mathematical Framework](#mathematical-framework)
-- [Repository Structure](#repository-structure)
-- [Experimental Results](#experimental-results)
-- [Empirical Validation](#empirical-validation)
-- [Setup and Usage](#setup-and-usage)
-- [Limitations and Future Work](#limitations-and-future-work)
-- [Citation](#citation)
-- [References](#references)
+Experiments on a controlled 8x8 GridWorld benchmark show that the hybrid agent matches optimal planner reward (mean -3.00) while invoking deliberative planning on fewer than 1 in 14 decision steps.
 
 ---
 
-## Problem Formulation
+## Project Overview
 
-We model the navigation task as a **Markov Decision Process** (MDP) defined by the tuple M = (S, A, P, R, gamma):
+This repository implements a modular reinforcement learning system composed of five components: a GridWorld environment, a greedy heuristic policy, a synchronous Value Iteration planner, a count-based curiosity engine, and a confidence-threshold Executive Control module that arbitrates between the heuristic and the planner at each timestep.
 
-| Symbol | Definition |
-|--------|-----------|
-| S | 8x8 grid cells (row, col), passable cells only |
-| A | {up, down, left, right}, four cardinal actions |
-| P(s' given s,a) | Deterministic transition (single successor state) |
-| R(s,a) | +10 goal, -1 step, -5 wall collision |
-| gamma | 0.95 discount factor |
-
-The agent starts at (0,0) and must reach (7,7). Approximately 20% of non-terminal cells are blocked as obstacles (fixed per random seed). The optimal policy pi* maximises the expected discounted return:
-
-```
-V_pi(s) = E_pi [ sum_{t=0}^{inf} gamma^t * R(s_t, a_t) | s_0 = s ]
-```
+The system is built entirely from scratch in Python using only NumPy, with no RL libraries, so that every algorithmic decision is transparent and traceable. The primary goal is to study how the interaction between these components affects agent behaviour - specifically exploration coverage, convergence properties, and the computational cost of near-optimal decision-making.
 
 ---
 
-## Architecture Overview
+## Research Questions
 
-The system comprises five components orchestrated by an Executive Control module:
+1. **Arbitration efficiency:** Does confidence-threshold arbitration between a fast heuristic and a slow optimal planner preserve the planner's performance while substantially reducing how often the planner is invoked?
 
-```
- +--------------------------------------------------------------+
- |                     EXECUTIVE CONTROL                        |
- |   if Q(s, a_plan) > Q(s, a_heur) + xi  -->  use planner     |
- |   else                                  -->  use heuristic   |
- +--------+--------------------------------------+--------------+
-          |                                      |
-   +------+------+                      +--------+-------+
-   |  HEURISTIC  |                      |  DELIBERATIVE  |
-   |   POLICY    |                      |    PLANNER     |
-   |  pi_L(s):   |                      |  VI --> Q*(s,a)|
-   |  Manhattan  |                      |  (Bellman ops) |
-   +-------------+                      +----------------+
-                           |
-                  +--------+--------+
-                  |   MOTIVATION    |
-                  |    ENGINE       |
-                  |  r_int = -logP  |
-                  |  R' = R + b*r   |
-                  +-----------------+
-```
+2. **Curiosity and coverage:** Does an information-gain curiosity signal (surprise = -log P_model) drive more systematic state-space coverage compared to pure exploitation, and does this coverage grow monotonically over episodes?
 
-**Module roles:**
-- **Heuristic Policy** (pi_L): greedy Manhattan-distance policy  fast, O(1) per step
-- **Deliberative Planner**: tabular Value Iteration  provably convergent to Q*
-- **Motivation Engine**: surprise-based curiosity bonus driving exploration
-- **Executive Control**: threshold arbiter balancing speed vs. optimality
+3. **Convergence behaviour:** Does synchronous Value Iteration on a small finite MDP exhibit the geometric convergence rate expected from the Bellman contraction property, and at what sweep does it reach practical convergence?
 
 ---
 
-## Mathematical Framework
+## Methodology
 
-### 1. Bellman Optimality and Value Iteration
+### Environment
 
-The Deliberative Planner solves for the optimal action-value function Q*(s,a), the unique fixed point of the **Bellman optimality operator** B:
+A deterministic 8x8 GridWorld MDP with approximately 20% randomly placed obstacles (seed=42). The agent starts at (0,0) and must reach (7,7). Rewards are +10 for reaching the goal, -1 per step, and -5 for hitting a wall. All three experimental conditions share the same obstacle layout for a fair comparison.
 
-```
-Q*(s,a) = sum_{s'} P(s'|s,a) [ R(s,a) + gamma * max_{a'} Q*(s', a') ]
-```
+### Heuristic Policy
 
-Value Iteration computes this by repeated application:
+A greedy Manhattan-distance policy that always moves toward the goal. This serves as the fast, cheap prior - directionally sensible but incapable of lookahead or obstacle reasoning beyond one step.
 
-```
-Q_{k+1}(s,a) = R(s,a) + gamma * max_{a'} Q_k(s', a')
-```
+### Deliberative Planner
 
-Because the environment is deterministic, P(s'|s,a) is a delta distribution and the expectation collapses to a single lookup. **Convergence** follows from the Banach Fixed-Point Theorem: B is a gamma-contraction in the infinity norm:
+Synchronous Value Iteration over the full state-action space. The Bellman backup is applied iteratively until the sup-norm change between successive Q-tables drops below a threshold of 1e-4. Convergence is tracked per sweep to observe the empirical decay rate.
 
-```
-|| B*Q1 - B*Q2 ||_inf  <=  gamma * || Q1 - Q2 ||_inf,   gamma in [0,1)
-```
+### Motivation Engine
 
-so `|| Q_{k+1} - Q_k ||_inf -> 0` geometrically. Empirically, convergence was reached at **sweep 181** with delta = 9.78e-5 (threshold eps = 1e-4).
-
-*Reference: Sutton & Barto (2018), Equations 4.9-4.10*
-
----
-
-### 2. Information-Gain Curiosity Reward
-
-The Motivation Engine computes a **surprise-based intrinsic reward** using an empirical transition model built from visit counts (Houthooft et al. 2016):
+A count-based surprise estimator. The intrinsic reward for a transition (s, a, s') is:
 
 ```
-P_model(s'|s,a) = N[s][a][s'] / sum_{s''} N[s][a][s'']
+r_int = -log( N[s][a][s'] / sum_s'' N[s][a][s''] + epsilon )
 ```
 
-Intrinsic reward (model surprise):
+This is added to the extrinsic reward with weight beta = 0.1. The signal is high for rarely-visited transitions and decays naturally as the agent accumulates experience - no manual annealing schedule is required.
+
+### Executive Control
+
+A threshold arbiter that selects between the two policies at each step:
 
 ```
-r_int(s,a,s') = -log( P_model(s'|s,a) + epsilon )
-```
-
-Combined reward sent to the planner:
-
-```
-R'(s,a,s') = R_ext(s,a) + beta * r_int(s,a,s'),   beta = 0.1
-```
-
-High surprise means a large exploration bonus, pushing the agent toward less-visited transitions. As the agent explores, P_model approaches the true dynamics and r_int approaches 0, redirecting attention back to the extrinsic goal.
-
-*Reference: Houthooft et al. (2016), "VIME"; Pathak et al. (2017), "Curiosity-Driven Exploration"*
-
----
-
-### 3. Confidence-Threshold Policy Arbitration
-
-Let pi_L denote the heuristic policy and pi_P the planner policy. The arbiter selects:
-
-```
-       | pi_P(s_t)   if Q_P(s_t, pi_P(s_t)) > Q_P(s_t, pi_L(s_t)) + xi
+       | planner action    if Q(s, a_planner) > Q(s, a_heuristic) + 0.5
 a_t = <
-       | pi_L(s_t)   otherwise
+       | heuristic action  otherwise
 ```
 
-where xi = 0.5 is the confidence threshold. The composite policy pi_NCSF satisfies the bounded-optimality guarantee:
+The planner's own Q-values are used to evaluate both actions. The planner overrides the heuristic only when it has genuine confidence in a better choice.
 
-```
-V_pi_NCSF(s)  >=  V_pi_L(s)  -  2*delta / (1 - gamma)
-```
+### Experimental Design
 
-where delta = `|| Q_P - Q* ||_inf` is the planner's approximation error. As delta -> 0 (planner converges), the NCSF policy approaches optimality from above the heuristic baseline.
+Three conditions were compared over 500 episodes each on the same GridWorld map:
 
-*Reference: Russell (1995), "Rationality and Intelligence"; Sutton & Barto (2018), Sec. 4.3*
+- **Heuristic Only** - greedy Manhattan policy, no planning
+- **Planner Only** - pure Value Iteration policy, no curiosity
+- **NCSF Full** - arbitration plus curiosity (the proposed hybrid)
+
+Value Iteration was run once before episodes began and the resulting Q-table was shared across conditions.
 
 ---
 
-## Repository Structure
+## Experimental Findings
 
-```
-curious-adaptive-planner/
-|
-+-- gridworld.py            # MDP environment: 8x8 grid, obstacles, rewards
-+-- heuristic_policy.py     # Fast greedy prior (pi_L): Manhattan distance
-+-- deliberative_planner.py # Synchronous Value Iteration --> Q*
-+-- motivation_engine.py    # Count-based curiosity: r_int = -log P_model
-+-- executive_control.py    # Arbitration: threshold comparison on Q-values
-|
-+-- experiment.py           # Three-condition 500-episode comparison
-+-- visualize.py            # Five diagnostic figures
-+-- run_all.py              # Master runner: experiment --> figures
-|
-+-- results/
-|   +-- figures/            # PNG plots (committed)
-|
-+-- requirements.txt
-+-- .gitignore
-+-- LICENSE
-+-- README.md
-```
+**Convergence:** Value Iteration converged at sweep 181 out of a maximum of 1000. The sup-norm delta decayed from approximately 15.0 at sweep 1 to 9.78e-5 at termination. The decay is approximately log-linear, consistent with the geometric rate expected from the Bellman contraction property at discount factor gamma = 0.95.
+
+**Arbitration usage:** Over 500 episodes, the Executive Control module selected the planner on an average of 7.1% of steps. This fraction remained relatively stable across episodes, suggesting that the structure of which states favour the planner is consistent once Value Iteration has converged.
+
+**Exploration coverage:** The NCSF agent visited 56 unique (state, action) pairs by the end of 500 episodes. Coverage grew monotonically with no plateau, indicating that the curiosity signal continued directing the agent toward less-visited transitions throughout training.
+
+**Reward comparison:** The heuristic achieves a mean episode reward of -8.30 despite reaching the goal every episode, because its reactive obstacle-avoidance produces path-inefficient trajectories. Both the Planner Only and NCSF Full conditions achieve -3.00, showing that the arbitration mechanism is sufficient to recover the planner's optimal routing without invoking it on every step.
 
 ---
 
-## Experimental Results
+## Results
 
-All three conditions run on the same GridWorld map (seed=42, 500 episodes, max 200 steps/episode).
+| Condition | Goal Rate | Mean Episode Reward | Planner Usage |
+|-----------|-----------|---------------------|---------------|
+| Heuristic Only | 100% | -8.30 | 0% |
+| Planner Only | 100% | -3.00 | 100% |
+| NCSF Full | 100% | -3.00 | 7.1% |
 
-### Summary Table
-
-| Condition | Goal Rate | Mean Reward | Notes |
-|-----------|-----------|-------------|-------|
-| **Heuristic Only** | 100% | **-8.30** | Fast but takes long, obstacle-avoiding paths |
-| **Planner Only** | 100% | **-3.00** | Optimal routes; VI converges before episodes |
-| **NCSF Full** | 100% | **-3.00** | Matches planner; uses deliberation on 7.1% of steps |
-
-**Key finding**: NCSF achieves *identical reward* to the optimal planner while invoking the expensive Value Iteration module on fewer than 1 in 14 steps  the heuristic handles the routine cases.
-
-### Value Iteration Convergence
-
-- Converged at **sweep 181** out of max 1000
-- Final delta = 9.78e-5
-- Convergence plot shows geometric decay consistent with contraction factor gamma = 0.95
-
-### Exploration Coverage
-
-- NCSF_FULL visited **56 unique (s,a) pairs** by end of 500 episodes
-- Coverage grows monotonically as the curiosity bonus drives the agent to less-visited transitions
+The central observation is that the NCSF agent matches optimal planner performance while delegating the vast majority of decisions to the cheap heuristic. The 5.3-unit reward gap between the heuristic and NCSF reflects the planner's ability to find shorter, obstacle-aware paths - a capability the greedy heuristic cannot reproduce without lookahead.
 
 ### Figures
 
@@ -232,29 +128,40 @@ All three conditions run on the same GridWorld map (seed=42, 500 episodes, max 2
 
 ---
 
-## Empirical Validation
+## Repository Structure
 
-### Claim 1 - Bellman Operator Convergence
+```
+curious-adaptive-planner/
+|
++-- gridworld.py            # MDP environment: grid construction, step, transition
++-- heuristic_policy.py     # Greedy Manhattan-distance prior policy
++-- deliberative_planner.py # Synchronous Value Iteration with convergence logging
++-- motivation_engine.py    # Count-based curiosity: surprise = -log P_model
++-- executive_control.py    # Confidence-threshold arbitration and usage tracking
+|
++-- experiment.py           # Three-condition 500-episode comparison
++-- visualize.py            # Generates five diagnostic figures from saved results
++-- run_all.py              # Runs experiment then visualize in sequence
+|
++-- results/
+|   +-- figures/            # PNG diagnostic plots (committed)
+|
++-- requirements.txt
++-- LICENSE
++-- README.md
+```
 
-**Theory**: B is a gamma-contraction so `|| Q_{k+1} - Q_k ||_inf` decays geometrically.
-
-**Evidence**: `02_convergence.png` shows log-linear decay from delta ~15 at sweep 1 to 9.78e-5 at sweep 181. The slope on the log plot approximates log(0.95) ~ -0.051 per sweep, consistent with the theoretical bound.
+Each module corresponds to a single conceptual component so that individual pieces can be studied, modified, or replaced independently. The heuristic policy, for instance, can be swapped for any callable that maps a state to an action without changing the rest of the system.
 
 ---
 
-### Claim 2 - Curiosity Drives Systematic Exploration
+## Research Context
 
-**Theory**: Information-gain reward incentivises the agent to reduce model uncertainty, leading to polynomial (rather than exponential) state-space coverage (Strehl & Littman 2008).
+This project was built to investigate a specific question about computational efficiency in sequential decision-making: under what conditions can a cheap approximate policy substitute for an expensive optimal one, and how large is the resulting performance cost? The arbitration mechanism studied here is a minimal version of dual-process ideas that appear in cognitive science and have been explored in the RL literature under the framing of bounded optimality (Russell 1995).
 
-**Evidence**: `05_exploration_coverage.png` shows monotone growth in unique (s,a) pairs visited. The NCSF agent reaches 56 state-action pairs without any external reward shaping, demonstrating the exploration-driving effect of the surprise bonus.
+The curiosity component was included to examine whether a simple count-based surprise signal is sufficient to drive meaningful exploration in a small tabular environment, without requiring the parametric world models used in more complex settings such as VIME (Houthooft et al. 2016) or prediction-error curiosity (Pathak et al. 2017).
 
----
-
-### Claim 3 - Bounded Optimality of Composite Policy
-
-**Theory**: `V_pi_NCSF(s) >= V_pi_L(s) - 2*delta/(1-gamma)`
-
-**Evidence**: `01_learning_curves.png` and the summary table confirm -3.00 >= -8.30, i.e., NCSF strictly dominates the heuristic baseline. The performance gap (~5.3 reward units) is bounded by the planner's accuracy as predicted.
+The deliberate choice to use no RL libraries reflects a preference for transparency over convenience: every update rule, every convergence check, and every arbitration decision is directly visible in the source code and traceable to a specific algorithmic choice.
 
 ---
 
@@ -274,76 +181,34 @@ cd curious-adaptive-planner
 pip install -r requirements.txt
 ```
 
-### Run Everything
+### Run Full Pipeline
 
 ```
 python run_all.py
 ```
 
-This runs `experiment.py` (~1s) followed by `visualize.py` (~4s). All outputs go to `results/` and `results/figures/`.
-
-### Run Steps Individually
-
-```
-python experiment.py
-python visualize.py
-```
-
-### Explore Interactively
-
-```python
-from gridworld import GridWorld
-from deliberative_planner import DeliberativePlanner
-
-env     = GridWorld(seed=42)
-planner = DeliberativePlanner(env)
-planner.value_iteration()
-
-state = env.reset()
-env.render()
-
-action = planner.get_action(state)
-print("Best action:", action)
-```
+Runs the three-condition experiment and generates all five figures. Total runtime under 10 seconds.
 
 ---
 
-## Limitations and Future Work
+## References
 
-This implementation is intentionally minimal to keep the theory-code correspondence transparent. Several simplifications warrant acknowledgement:
-
-**Environment**: The GridWorld is discrete, fully observable, and deterministic. Real-world applications involve continuous state spaces, partial observability, and stochastic dynamics. Extending to stochastic transitions would require approximate dynamic programming or deep RL methods.
-
-**Heuristic module**: The Manhattan-distance heuristic is a toy stand-in for the kind of rich semantic prior that a pre-trained language model would provide. A natural extension is to replace `HeuristicPolicy` with a fine-tuned LLM queried via a tool-use interface (Yao et al. 2023  ReAct), making the arbitration mechanism directly applicable to language-grounded tasks.
-
-**Curiosity model**: The tabular count-based approach scales as O(|S||A|) in memory. For large state spaces, a parametric surprise estimator (e.g., prediction-error curiosity as in Pathak et al. 2017, or a Bayesian neural network as in Houthooft et al. 2016) is necessary.
-
-**Meta-learning**: The planner is fixed after Value Iteration. A proper meta-learning extension (Finn et al. 2017  MAML) would allow the system to warm-start on a new map using experience from previous maps.
-
-**Arbitration threshold**: The confidence threshold xi = 0.5 is fixed. An adaptive schedule where xi decays as the planner's world model becomes more accurate could improve compute efficiency in the early training phase.
-
----
-
-## Related Work
-
-- **Curiosity-Driven Exploration**: Pathak et al. (2017) propose self-supervised prediction error as an intrinsic reward; this project uses a simpler count-based surprise that recovers the same qualitative exploration behaviour in the tabular setting.
-
-- **VIME**: Houthooft et al. (2016) formalise curiosity as information gain on a Bayesian world model  the theoretical inspiration for the `MotivationEngine` here.
-
-- **Dyna-Q**: Sutton (1991) introduced interleaving model-based planning with direct experience in a single learning loop, the foundational hybrid RL idea that motivates our architecture.
-
-- **ReAct**: Yao et al. (2023) demonstrate LLM-as-orchestrator with tool use, showing that a language model can take on the role of the heuristic prior in complex reasoning tasks  the natural next step for this framework.
+1. Sutton, R. S., & Barto, A. G. (2018). Reinforcement Learning: An Introduction (2nd ed.). MIT Press.
+2. Bellman, R. (1957). Dynamic Programming. Princeton University Press.
+3. Russell, S. (1995). Rationality and Intelligence. Artificial Intelligence, 94(1-2), 57-77.
+4. Houthooft, R., et al. (2016). VIME: Variational Information Maximizing Exploration. NeurIPS.
+5. Pathak, D., et al. (2017). Curiosity-Driven Exploration by Self-Supervised Prediction. ICML.
+6. Strehl, A. L., & Littman, M. L. (2008). An Analysis of Model-Based Interval Estimation for MDPs. JCSS, 74(8).
+7. Kahneman, D. (2011). Thinking, Fast and Slow. Farrar, Straus and Giroux.
 
 ---
 
 ## Citation
 
-If you build on this work, please cite:
-
 ```bibtex
 @misc{awari2025curiousplanner,
   author    = {Awari, Ajinkya},
-  title     = {{CuriousPlanner}: Curiosity-Augmented Value Iteration
+  title     = {{CuriousPlanner}: Investigating Curiosity-Augmented Value Iteration
                with Adaptive Policy Arbitration},
   year      = {2025},
   publisher = {GitHub},
@@ -353,16 +218,4 @@ If you build on this work, please cite:
 
 ---
 
-## References
-
-1. Sutton, R. S., & Barto, A. G. (2018). *Reinforcement Learning: An Introduction* (2nd ed.). MIT Press.
-2. Bellman, R. (1957). *Dynamic Programming*. Princeton University Press.
-3. Houthooft, R., Chen, X., Duan, Y., Schulman, J., De Turck, F., & Abbeel, P. (2016). VIME: Variational Information Maximizing Exploration. *NeurIPS*.
-4. Pathak, D., Agrawal, P., Efros, A. A., & Darrell, T. (2017). Curiosity-Driven Exploration by Self-Supervised Prediction. *ICML*.
-5. Strehl, A. L., & Littman, M. L. (2008). An Analysis of Model-Based Interval Estimation for Markov Decision Processes. *Journal of Computer and System Sciences, 74*(8), 1309-1331.
-6. Russell, S. (1995). Rationality and Intelligence. *Artificial Intelligence, 94*(1-2), 57-77.
-7. Finn, C., Abbeel, P., & Levine, S. (2017). Model-Agnostic Meta-Learning for Fast Adaptation of Deep Networks. *ICML*.
-8. Yao, S., et al. (2023). ReAct: Synergizing Reasoning and Acting in Language Models. *ICLR*.
-9. Sutton, R. S. (1991). Dyna, an Integrated Architecture for Learning, Planning, and Reacting. *ACM SIGART Bulletin, 2*(4), 160-163.
-
----
+*Published paper: Awari, A. et al. Plant Disease Detection Using Machine Learning. IJARSCT, Vol. 3, Issue 4, April 2023.*
